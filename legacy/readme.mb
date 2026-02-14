@@ -1,0 +1,3 @@
+I(with the help of chat gpt) wrote the simulation in jax, pytorch, and in pytorch trying to preallocate all the memmory.
+
+I fould that jax is much faster for large loads than python.
