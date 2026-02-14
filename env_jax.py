@@ -2,12 +2,18 @@ import jax
 import jax.numpy as jnp
 
 class ParticleEnvJAX:
-    def __init__(self, key, n_env=10, n_particles=10, dt=0.01, box_size=1.0, k=10.0):
+    def __init__(self, key, n_env=10, n_particles=10, dt=0.01, box_size=0.8, interaction_strength = 0.0001, boundary_force=1000.0, damping = 0.10,
+                 pos_range=1, vel_range = 0.01):
         self.n_env = n_env
         self.n_particles = n_particles
         self.dt = dt
         self.box_size = box_size
-        self.k = k
+        self.k = boundary_force
+        self.damping=damping
+        self.interaction_strength = interaction_strength
+        self.pos_range = pos_range
+        self.vel_range = vel_range
+
 
         # state initialized to zeros/ones
         self.pos = jnp.zeros((n_env, n_particles, 2))
@@ -24,12 +30,12 @@ class ParticleEnvJAX:
         self.under_pos = jnp.zeros((n_env, n_particles, 2))
         self.boundary_force = jnp.zeros((n_env, n_particles, 2))
 
-        self.init_random(key)
+        self.init_random(key,self.pos_range,self.vel_range)
 
         # jit compile the step function
         self._jit_step = jax.jit(self._step)
 
-    def init_random(self, key, pos_range=1.0, vel_range=0.1, charge_range=1.0):
+    def init_random(self, key, pos_range=1.0, vel_range=0.0001, charge_range=1.0):
         key1, key2, key3 = jax.random.split(key, 3)
         self.pos = jax.random.uniform(key1, (self.n_env, self.n_particles, 2), minval=-pos_range, maxval=pos_range)
         self.vel = jax.random.uniform(key2, (self.n_env, self.n_particles, 2), minval=-vel_range, maxval=vel_range)
@@ -41,13 +47,14 @@ class ParticleEnvJAX:
         dist3 = jnp.linalg.norm(r, axis=-1, keepdims=True)**3 + eps
         qiqj = charge * jnp.transpose(charge, (0,2,1))
         F = r * qiqj[:, :, :, None] / dist3
-        F_total = jnp.sum(F, axis=2)
+        F_total = jnp.sum(F, axis=2) * self.interaction_strength
 
-        over_pos = jnp.clip(pos - box_size, a_min=0.0)
-        under_pos = jnp.clip(-box_size - pos, a_min=0.0)
+        over_pos = jnp.clip(pos - box_size, a_min=0.0)**2
+        under_pos = -jnp.clip(box_size + pos, a_max=0.0)**2
         boundary_force = -k * (over_pos + under_pos)
 
         vel_new = vel + (F_total + boundary_force) * dt
+        vel_new *= self.damping
         pos_new = pos + vel_new * dt
         return pos_new, vel_new
 

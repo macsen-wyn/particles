@@ -1,3 +1,36 @@
-I(with the help of chat gpt) wrote the simulation in jax, pytorch, and in pytorch trying to preallocate all the memmory.
+Particle Simulation & JAX Dynamics Predictor
+Overview
 
-I fould that jax is much faster for large loads than python.
+This project implements a GPU-accelerated particle simulation in JAX, where particles interact via Coulomb forces and some can be controlled (“players”) while others are targets or balls. The simulation is fast and scalable with multiple environments and particles.
+
+I’ve experimented with both PyTorch and JAX environments and found JAX significantly faster for large-scale simulations. Current setup allows saving frames and generating videos of particle trajectories.
+
+Experiments Completed
+
+Benchmarked PyTorch vs JAX for various numbers of environments and particles.
+
+Explored memory usage and GPU limits.
+
+Implemented a video-saving utility for simulation playback.
+
+Tweaked simulation parameters (forces, damping, boundaries) for stable dynamics.
+
+Planned Experiments
+
+Frequency of particle repositioning/reset.
+
+Buffer layout: time-first vs env-first and optimal buffer length.
+
+Prediction horizon: 1-step vs multi-step future prediction.
+
+Input features: full state vs masked/partial state (pos only, velocities hidden).
+
+Latent space representation: test different latent dimensions for predictive models.
+
+Visualization of predicted vs actual trajectories using arrows and colored dots.
+
+Next Steps
+
+Integrate a predictive network in JAX (Haiku + Optax).
+
+Train it to predict particle dynamics several steps into the future.
