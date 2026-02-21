@@ -10,6 +10,10 @@ def watch(env, n_steps=100, scale=500, output_file="simulation.mp4", fps=30, rad
     
     for step in range(n_steps):
         env.step()
+        env.measure_KE()
+        env.measure_PE()
+        total_energy = env.KE + env.PE
+
         pos = np.array(env.pos[0])  # first environment
         img = np.ones((scale, scale, 3), dtype=np.uint8) * 255  # white background
 
@@ -27,6 +31,12 @@ def watch(env, n_steps=100, scale=500, output_file="simulation.mp4", fps=30, rad
 
         for x, y in zip(px, py):
             cv2.circle(img, (x, y), radius, (0, 0, 255), -1)  # red particles
+
+        # draw energy text
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        cv2.putText(img, f"KE: {env.KE[0]:.3f}", (10, 20), font, 0.6, (0, 0, 0), 2)
+        cv2.putText(img, f"PE: {env.PE[0]:.3f}", (10, 50), font, 0.6, (0, 0, 0), 2)
+        cv2.putText(img, f"E: {total_energy[0]:.3f}", (10, 80), font, 0.6, (0, 0, 0), 2)
 
         out.write(img)
 

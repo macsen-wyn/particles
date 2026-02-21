@@ -2,18 +2,21 @@ import jax
 import jax.numpy as jnp
 
 class ParticleEnvJAX:
-    def __init__(self, key, n_env=10, n_particles=10, dt=0.01, box_size=0.8, interaction_strength = 0.0001, boundary_force=1000.0, damping = 0.10,
+    def __init__(self, key, n_env=10, n_particles=10, dt=0.01, box_size=0.8, interaction_strength = 0.0001, wall_force_coeff=1000.0, damping = 0.10,
                  pos_range=1, vel_range = 0.01):
         self.n_env = n_env
         self.n_particles = n_particles
         self.dt = dt
         self.box_size = box_size
-        self.k = boundary_force
+        self.wall_force_coeff = wall_force_coeff
         self.damping=damping
         self.interaction_strength = interaction_strength
         self.pos_range = pos_range
         self.vel_range = vel_range
-
+        
+        #constants
+        mask = 1.0 - jnp.eye(self.n_particles)  # shape (n_particles, n_particles)
+        self.PE_mask = mask[None, :, :]  # broadcast to (n_env, n_particles, n_particles)
 
         # state initialized to zeros/ones
         self.pos = jnp.zeros((n_env, n_particles, 2))
@@ -41,7 +44,7 @@ class ParticleEnvJAX:
         #self.charge = jax.random.uniform(key3, (self.n_env, self.n_particles, 1), minval=0.0, maxval=charge_range)
         #self.qiqj = self.charge * jnp.transpose(self.charge, (0,2,1))
 
-    def _step(self, pos, vel, qiqj, dt, box_size, k):
+    def _step(self, pos, vel, qiqj, dt, box_size, wall_force_coeff):
         eps = 1e-4
         r = pos[:, :, None, :] - pos[:, None, :, :]
         dist3 = jnp.linalg.norm(r, axis=-1, keepdims=True)**3 + eps
@@ -50,7 +53,7 @@ class ParticleEnvJAX:
 
         over_pos = jnp.clip(pos - box_size, a_min=0.0)**2
         under_pos = -jnp.clip(box_size + pos, a_max=0.0)**2
-        boundary_force = -k * (over_pos + under_pos)
+        boundary_force = -wall_force_coeff * (over_pos + under_pos)
 
         vel_new = vel + (F_total + boundary_force) * dt
         vel_new *= self.damping
@@ -61,20 +64,26 @@ class ParticleEnvJAX:
         KE = 0.5 * jnp.sum(vel**2, axis=(-2,-1))
         return KE
     
-    def _measure_PE_from_pos(self, pos, qiqj):
+    def _measure_PE_from_pos(self, pos, qiqj, box_size, wall_force_coeff, mask):
         # pairwise distances
         r = pos[:, :, None, :] - pos[:, None, :, :]
-        dist = jnp.linalg.norm(r, axis=-1, keepdims=True) + 1e-4
+        dist = jnp.linalg.norm(r, axis=-1) + 1e-4
         # potential energy: sum(qiqj / r) with 0.5 to avoid double-counting
-        PE = 0.5 * jnp.sum(qiqj / dist, axis=(1,2))
-        return PE
+        PE = 0.5 * self.interaction_strength* jnp.sum(qiqj / dist * mask, axis=(1,2))
+
+        over_pos = jnp.clip(pos - box_size, a_min=0.0)
+        under_pos = jnp.clip(-box_size - pos, a_min=0.0)
+        # integrate force: F = -k * x^2 -> V = k/3 * x^3
+        PE_boundary = wall_force_coeff/3 * jnp.sum(over_pos**3 + under_pos**3, axis=(-1,-2))
+        
+        return PE + PE_boundary
 
     def measure_PE(self):
         # store total potential energy in self.PE
-        self.PE = self._jit_measure_PE(self.pos, self.qiqj)
+        self.PE = self._jit_measure_PE(self.pos, self.qiqj, self.box_size, self.wall_force_coeff, self.PE_mask)
 
     def measure_KE(self):
         self.KE = self._jit_measure_KE(self.vel)
 
     def step(self):
-        self.pos, self.vel = self._jit_step(self.pos, self.vel, self.qiqj, self.dt, self.box_size, self.k)
+        self.pos, self.vel = self._jit_step(self.pos, self.vel, self.qiqj, self.dt, self.box_size, self.wall_force_coeff)
