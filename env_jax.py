@@ -23,15 +23,16 @@ class ParticleEnvJAX:
 
 
         # buffers
-        self.KE = jnp.zeros((n_env, n_particles, n_particles, 1))
-        self.PE = jnp.zeros((n_env, n_particles, n_particles, 1))
-        self.E = jnp.zeros((n_env, n_particles, n_particles, 1))
+        self.KE = jnp.zeros((n_env,))
+        self.PE = jnp.zeros((n_env,))
+        self.E = jnp.zeros((n_env,))
 
         self.init_random(key,self.pos_range,self.vel_range)
 
         # jit compile the step function
         self._jit_step = jax.jit(self._step)
         self._jit_measure_KE = jax.jit(self._measure_KE)
+        self._jit_measure_PE = jax.jit(self._measure_PE_from_pos)
 
     def init_random(self, key, pos_range=1.0, vel_range=0.0001, charge_range=1.0):
         key1, key2, key3 = jax.random.split(key, 3)
@@ -60,6 +61,18 @@ class ParticleEnvJAX:
         KE = 0.5 * jnp.sum(vel**2, axis=(-2,-1))
         return KE
     
+    def _measure_PE_from_pos(self, pos, qiqj):
+        # pairwise distances
+        r = pos[:, :, None, :] - pos[:, None, :, :]
+        dist = jnp.linalg.norm(r, axis=-1, keepdims=True) + 1e-4
+        # potential energy: sum(qiqj / r) with 0.5 to avoid double-counting
+        PE = 0.5 * jnp.sum(qiqj / dist, axis=(1,2))
+        return PE
+
+    def measure_PE(self):
+        # store total potential energy in self.PE
+        self.PE = self._jit_measure_PE(self.pos, self.qiqj)
+
     def measure_KE(self):
         self.KE = self._jit_measure_KE(self.vel)
 
