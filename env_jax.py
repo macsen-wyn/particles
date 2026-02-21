@@ -44,19 +44,19 @@ class ParticleEnvJAX:
         #self.charge = jax.random.uniform(key3, (self.n_env, self.n_particles, 1), minval=0.0, maxval=charge_range)
         #self.qiqj = self.charge * jnp.transpose(self.charge, (0,2,1))
 
-    def _step(self, pos, vel, qiqj, dt, box_size, wall_force_coeff):
+    def _step(self, pos, vel, qiqj, dt, box_size, wall_force_coeff, interaction_strength, damping):
         eps = 1e-4
         r = pos[:, :, None, :] - pos[:, None, :, :]
         dist3 = jnp.linalg.norm(r, axis=-1, keepdims=True)**3 + eps
         F = r * qiqj[:, :, :, None] / dist3
-        F_total = jnp.sum(F, axis=2) * self.interaction_strength
+        F_total = jnp.sum(F, axis=2) * interaction_strength
 
         over_pos = jnp.clip(pos - box_size, a_min=0.0)**2
         under_pos = -jnp.clip(box_size + pos, a_max=0.0)**2
         boundary_force = -wall_force_coeff * (over_pos + under_pos)
 
         vel_new = vel + (F_total + boundary_force) * dt
-        vel_new *= self.damping
+        vel_new *= damping
         pos_new = pos + vel_new * dt
         return pos_new, vel_new
     
@@ -64,12 +64,12 @@ class ParticleEnvJAX:
         KE = 0.5 * jnp.sum(vel**2, axis=(-2,-1))
         return KE
     
-    def _measure_PE_from_pos(self, pos, qiqj, box_size, wall_force_coeff, mask):
+    def _measure_PE_from_pos(self, pos, qiqj, box_size, wall_force_coeff, mask, interaction_strength):
         # pairwise distances
         r = pos[:, :, None, :] - pos[:, None, :, :]
         dist = jnp.linalg.norm(r, axis=-1) + 1e-4
         # potential energy: sum(qiqj / r) with 0.5 to avoid double-counting
-        PE = 0.5 * self.interaction_strength* jnp.sum(qiqj / dist * mask, axis=(1,2))
+        PE = 0.5 * interaction_strength * jnp.sum(qiqj / dist * mask, axis=(1,2))
 
         over_pos = jnp.clip(pos - box_size, a_min=0.0)
         under_pos = jnp.clip(-box_size - pos, a_min=0.0)
@@ -77,13 +77,15 @@ class ParticleEnvJAX:
         PE_boundary = wall_force_coeff/3 * jnp.sum(over_pos**3 + under_pos**3, axis=(-1,-2))
         
         return PE + PE_boundary
+    
+    
 
     def measure_PE(self):
         # store total potential energy in self.PE
-        self.PE = self._jit_measure_PE(self.pos, self.qiqj, self.box_size, self.wall_force_coeff, self.PE_mask)
+        self.PE = self._jit_measure_PE(self.pos, self.qiqj, self.box_size, self.wall_force_coeff, self.PE_mask, self.interaction_strength)
 
     def measure_KE(self):
         self.KE = self._jit_measure_KE(self.vel)
 
     def step(self):
-        self.pos, self.vel = self._jit_step(self.pos, self.vel, self.qiqj, self.dt, self.box_size, self.wall_force_coeff)
+        self.pos, self.vel = self._jit_step(self.pos, self.vel, self.qiqj, self.dt, self.box_size, self.wall_force_coeff, self.interaction_strength, self.damping)
