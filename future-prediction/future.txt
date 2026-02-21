@@ -1,0 +1,4 @@
+d(p(e(sn))) ~= sn+t, predict the future.
+p(e(sn)) ~= e(sn+t) match the future embedding.
+d(e(sn)) ~= sn encode and decode.
+

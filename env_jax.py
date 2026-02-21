@@ -2,8 +2,8 @@ import jax
 import jax.numpy as jnp
 
 class ParticleEnvJAX:
-    def __init__(self, key, n_env=10, n_particles=10, dt=0.01, box_size=0.8, interaction_strength = 0.0001, wall_force_coeff=1000.0, damping = 0.10,
-                 pos_range=1, vel_range = 0.01):
+    def __init__(self, key, n_env=10, n_particles=10, dt=0.01, box_size=0.8, interaction_strength = 0.05, wall_force_coeff=1000.0, damping = 1,
+                 pos_range=1, vel_range = 2.0):
         self.n_env = n_env
         self.n_particles = n_particles
         self.dt = dt
@@ -33,9 +33,9 @@ class ParticleEnvJAX:
         self.init_random(key,self.pos_range,self.vel_range)
 
         # jit compile the step function
-        self._jit_step = jax.jit(self._step)
-        self._jit_measure_KE = jax.jit(self._measure_KE)
-        self._jit_measure_PE = jax.jit(self._measure_PE_from_pos)
+        self._jit_step = jax.jit(ParticleEnvJAX._step)
+        self._jit_measure_KE = jax.jit(ParticleEnvJAX._measure_KE)
+        self._jit_measure_PE = jax.jit(ParticleEnvJAX._measure_PE_from_pos)
 
     def init_random(self, key, pos_range=1.0, vel_range=0.0001, charge_range=1.0):
         key1, key2, key3 = jax.random.split(key, 3)
@@ -43,8 +43,8 @@ class ParticleEnvJAX:
         self.vel = jax.random.uniform(key2, (self.n_env, self.n_particles, 2), minval=-vel_range, maxval=vel_range)
         #self.charge = jax.random.uniform(key3, (self.n_env, self.n_particles, 1), minval=0.0, maxval=charge_range)
         #self.qiqj = self.charge * jnp.transpose(self.charge, (0,2,1))
-
-    def _step(self, pos, vel, qiqj, dt, box_size, wall_force_coeff, interaction_strength, damping):
+    @staticmethod
+    def _step(pos, vel, qiqj, dt, box_size, wall_force_coeff, interaction_strength, damping):
         eps = 1e-4
         r = pos[:, :, None, :] - pos[:, None, :, :]
         dist3 = jnp.linalg.norm(r, axis=-1, keepdims=True)**3 + eps
@@ -60,11 +60,13 @@ class ParticleEnvJAX:
         pos_new = pos + vel_new * dt
         return pos_new, vel_new
     
-    def _measure_KE(self, vel):
+    @staticmethod
+    def _measure_KE(vel):
         KE = 0.5 * jnp.sum(vel**2, axis=(-2,-1))
         return KE
     
-    def _measure_PE_from_pos(self, pos, qiqj, box_size, wall_force_coeff, mask, interaction_strength):
+    @staticmethod
+    def _measure_PE_from_pos(pos, qiqj, box_size, wall_force_coeff, mask, interaction_strength):
         # pairwise distances
         r = pos[:, :, None, :] - pos[:, None, :, :]
         dist = jnp.linalg.norm(r, axis=-1) + 1e-4
