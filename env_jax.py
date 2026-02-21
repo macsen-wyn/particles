@@ -23,13 +23,6 @@ class ParticleEnvJAX:
 
 
         # buffers
-        self.r = jnp.zeros((n_env, n_particles, n_particles, 2))
-        self.dist3 = jnp.zeros((n_env, n_particles, n_particles, 1))
-        self.F = jnp.zeros((n_env, n_particles, n_particles, 2))
-        self.F_total = jnp.zeros((n_env, n_particles, 2))
-        self.over_pos = jnp.zeros((n_env, n_particles, 2))
-        self.under_pos = jnp.zeros((n_env, n_particles, 2))
-        self.boundary_force = jnp.zeros((n_env, n_particles, 2))
         self.KE = jnp.zeros((n_env, n_particles, n_particles, 1))
         self.PE = jnp.zeros((n_env, n_particles, n_particles, 1))
         self.E = jnp.zeros((n_env, n_particles, n_particles, 1))
