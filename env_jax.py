@@ -29,11 +29,15 @@ class ParticleEnvJAX:
         self.over_pos = jnp.zeros((n_env, n_particles, 2))
         self.under_pos = jnp.zeros((n_env, n_particles, 2))
         self.boundary_force = jnp.zeros((n_env, n_particles, 2))
+        self.KE = jnp.zeros((n_env, n_particles, n_particles, 1))
+        self.PE = jnp.zeros((n_env, n_particles, n_particles, 1))
+        self.E = jnp.zeros((n_env, n_particles, n_particles, 1))
 
         self.init_random(key,self.pos_range,self.vel_range)
 
         # jit compile the step function
         self._jit_step = jax.jit(self._step)
+        self._jit_measure_KE = jax.jit(self._measure_KE)
 
     def init_random(self, key, pos_range=1.0, vel_range=0.0001, charge_range=1.0):
         key1, key2, key3 = jax.random.split(key, 3)
@@ -57,6 +61,13 @@ class ParticleEnvJAX:
         vel_new *= self.damping
         pos_new = pos + vel_new * dt
         return pos_new, vel_new
+    
+    def _measure_KE(self, vel):
+        KE = 0.5 * jnp.sum(vel**2, axis=(-2,-1))
+        return KE
+    
+    def measure_KE(self):
+        self.KE = self._jit_measure_KE(self.vel)
 
     def step(self):
         self.pos, self.vel = self._jit_step(self.pos, self.vel, self.charge, self.dt, self.box_size, self.k)
