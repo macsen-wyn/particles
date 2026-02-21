@@ -19,11 +19,12 @@ class ParticleEnvJAX:
         self.pos = jnp.zeros((n_env, n_particles, 2))
         self.vel = jnp.zeros((n_env, n_particles, 2))
         self.charge = jnp.ones((n_env, n_particles, 1))
+        self.qiqj = self.charge * jnp.transpose(self.charge, (0,2,1))
+
 
         # buffers
         self.r = jnp.zeros((n_env, n_particles, n_particles, 2))
         self.dist3 = jnp.zeros((n_env, n_particles, n_particles, 1))
-        self.qiqj = jnp.zeros((n_env, n_particles, n_particles, 1))
         self.F = jnp.zeros((n_env, n_particles, n_particles, 2))
         self.F_total = jnp.zeros((n_env, n_particles, 2))
         self.over_pos = jnp.zeros((n_env, n_particles, 2))
@@ -44,12 +45,12 @@ class ParticleEnvJAX:
         self.pos = jax.random.uniform(key1, (self.n_env, self.n_particles, 2), minval=-pos_range, maxval=pos_range)
         self.vel = jax.random.uniform(key2, (self.n_env, self.n_particles, 2), minval=-vel_range, maxval=vel_range)
         #self.charge = jax.random.uniform(key3, (self.n_env, self.n_particles, 1), minval=0.0, maxval=charge_range)
+        #self.qiqj = self.charge * jnp.transpose(self.charge, (0,2,1))
 
-    def _step(self, pos, vel, charge, dt, box_size, k):
+    def _step(self, pos, vel, qiqj, dt, box_size, k):
         eps = 1e-4
         r = pos[:, :, None, :] - pos[:, None, :, :]
         dist3 = jnp.linalg.norm(r, axis=-1, keepdims=True)**3 + eps
-        qiqj = charge * jnp.transpose(charge, (0,2,1))
         F = r * qiqj[:, :, :, None] / dist3
         F_total = jnp.sum(F, axis=2) * self.interaction_strength
 
@@ -70,4 +71,4 @@ class ParticleEnvJAX:
         self.KE = self._jit_measure_KE(self.vel)
 
     def step(self):
-        self.pos, self.vel = self._jit_step(self.pos, self.vel, self.charge, self.dt, self.box_size, self.k)
+        self.pos, self.vel = self._jit_step(self.pos, self.vel, self.qiqj, self.dt, self.box_size, self.k)
